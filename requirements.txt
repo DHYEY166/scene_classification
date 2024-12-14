@@ -1,5 +1,6 @@
-numpy==1.23.5
+numpy==1.21.6
 Pillow==9.5.0
 streamlit==1.24.0
 pandas==1.5.3
-tflite-runtime==2.12.0
+tensorflow==2.8.0
+protobuf==3.19.4
