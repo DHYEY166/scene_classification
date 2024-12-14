@@ -1,14 +1,9 @@
-# app.py
 import streamlit as st
 import tensorflow as tf
-from tensorflow import keras
 import numpy as np
 import pandas as pd
 from PIL import Image
 import os
-
-# Enable mixed precision
-tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 # Set page configuration
 st.set_page_config(
@@ -21,55 +16,46 @@ st.set_page_config(
 IMAGE_SIZE = (224, 224)
 CLASS_NAMES = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street']
 
-def create_model():
-    """Create the VGG16-based model with mixed precision"""
-    # Base VGG16 model
+def create_scene_model():
+    """Create VGG16-based model with proper initialization"""
+    # Load VGG16 with pretrained weights
     base_model = tf.keras.applications.VGG16(
         weights='imagenet',
         include_top=False,
         input_shape=(224, 224, 3)
     )
+    
+    # Freeze the base model layers
     base_model.trainable = False
     
-    # Create new model
-    inputs = tf.keras.Input(shape=(224, 224, 3))
+    # Build the complete model
+    model = tf.keras.Sequential([
+        # Input layer
+        tf.keras.layers.InputLayer(input_shape=(224, 224, 3)),
+        
+        # VGG16 base
+        base_model,
+        
+        # Additional layers
+        tf.keras.layers.GlobalAveragePooling2D(),
+        tf.keras.layers.BatchNormalization(),
+        
+        # Dense layers
+        tf.keras.layers.Dense(512, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.01)),
+        tf.keras.layers.Dropout(0.3),
+        tf.keras.layers.BatchNormalization(),
+        
+        tf.keras.layers.Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.01)),
+        tf.keras.layers.Dropout(0.2),
+        tf.keras.layers.BatchNormalization(),
+        
+        # Output layer
+        tf.keras.layers.Dense(len(CLASS_NAMES), activation='softmax', kernel_regularizer=tf.keras.regularizers.l2(0.01))
+    ])
     
-    # Cast to float16
-    x = tf.cast(inputs, dtype=tf.float16)
-    
-    # VGG16 base
-    x = base_model(x, training=False)
-    
-    # Global pooling
-    x = tf.keras.layers.GlobalAveragePooling2D()(x)
-    
-    # Batch norm
-    x = tf.keras.layers.BatchNormalization()(x)
-    
-    # Dense layers
-    x = tf.keras.layers.Dense(512, activation='relu',
-                            kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
-    x = tf.keras.layers.Dropout(0.3)(x)
-    
-    x = tf.keras.layers.BatchNormalization()(x)
-    x = tf.keras.layers.Dense(256, activation='relu',
-                            kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
-    x = tf.keras.layers.Dropout(0.2)(x)
-    
-    x = tf.keras.layers.BatchNormalization()(x)
-    
-    # Final layer with float32
-    outputs = tf.cast(
-        tf.keras.layers.Dense(6, activation='softmax',
-                            kernel_regularizer=tf.keras.regularizers.l2(0.01))(x),
-        dtype=tf.float32
-    )
-    
-    model = tf.keras.Model(inputs, outputs)
-    
-    # Compile with mixed precision
+    # Compile model
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+        optimizer=tf.keras.optimizers.Adam(1e-4),
         loss='categorical_crossentropy',
         metrics=['accuracy']
     )
@@ -80,18 +66,23 @@ def create_model():
 def load_classification_model():
     """Load or create the model"""
     try:
-        # Create model with mixed precision
-        model = create_model()
+        # Create base model
+        model = create_scene_model()
         
-        # Load weights if they exist
-        if os.path.exists('best_vgg16.keras'):
-            model.load_weights('best_vgg16.keras')
-            st.success("Model weights loaded successfully!")
+        # Load custom weights if available
+        weights_path = 'best_vgg16.keras'
+        if os.path.exists(weights_path):
+            try:
+                # Try loading weights
+                model.load_weights(weights_path)
+                st.success("Custom weights loaded successfully!")
+            except Exception as e:
+                st.warning(f"Could not load custom weights: {str(e)}")
+                st.info("Using base model with ImageNet weights.")
         else:
-            st.warning("Using base model without custom weights.")
+            st.warning("Model weights file not found. Using base model with ImageNet weights.")
         
         return model
-        
     except Exception as e:
         st.error(f"Error initializing model: {str(e)}")
         return None
@@ -106,17 +97,16 @@ def preprocess_image(image):
         # Resize image
         image = image.resize(IMAGE_SIZE, Image.Resampling.LANCZOS)
         
-        # Convert to array and preprocess
+        # Convert to array
         img_array = np.array(image, dtype=np.float32)
         
-        # Normalize
+        # Preprocess input (scale to [0, 1])
         img_array = img_array / 255.0
         
         # Add batch dimension
         img_array = np.expand_dims(img_array, axis=0)
         
         return img_array
-        
     except Exception as e:
         st.error(f"Error preprocessing image: {str(e)}")
         return None
@@ -143,7 +133,6 @@ def predict_scene(model, image):
         }
         
         return predicted_class, confidence, class_probabilities
-        
     except Exception as e:
         st.error(f"Error making prediction: {str(e)}")
         return None, None, None
@@ -153,9 +142,8 @@ def main():
     st.title("Scene Classification using VGG16")
     st.write("Upload an image of a scene to classify it into one of six categories: buildings, forest, glacier, mountain, sea, or street.")
     
-    # Display version information
+    # Display version info in sidebar
     st.sidebar.write(f"TensorFlow version: {tf.__version__}")
-    st.sidebar.write(f"Keras version: {tf.keras.__version__}")
     
     # Load model
     with st.spinner("Loading model..."):
@@ -219,7 +207,6 @@ def main():
                         probabilities_df.set_index('Class'),
                         use_container_width=True
                     )
-                    
         except Exception as e:
             st.error(f"Error processing image: {str(e)}")
             st.info("Please try uploading a different image or check the image format.")
