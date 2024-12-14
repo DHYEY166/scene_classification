@@ -1,15 +1,14 @@
 # app.py
 import streamlit as st
 import tensorflow as tf
-import keras
-from keras import layers
+from tensorflow import keras
 import numpy as np
 import pandas as pd
 from PIL import Image
 import os
 
-print(f"TensorFlow version: {tf.__version__}")
-print(f"Keras version: {keras.__version__}")
+# Enable mixed precision
+tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 # Set page configuration
 st.set_page_config(
@@ -22,39 +21,79 @@ st.set_page_config(
 IMAGE_SIZE = (224, 224)
 CLASS_NAMES = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street']
 
+def create_model():
+    """Create the VGG16-based model with mixed precision"""
+    # Base VGG16 model
+    base_model = tf.keras.applications.VGG16(
+        weights='imagenet',
+        include_top=False,
+        input_shape=(224, 224, 3)
+    )
+    base_model.trainable = False
+    
+    # Create new model
+    inputs = tf.keras.Input(shape=(224, 224, 3))
+    
+    # Cast to float16
+    x = tf.cast(inputs, dtype=tf.float16)
+    
+    # VGG16 base
+    x = base_model(x, training=False)
+    
+    # Global pooling
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    
+    # Batch norm
+    x = tf.keras.layers.BatchNormalization()(x)
+    
+    # Dense layers
+    x = tf.keras.layers.Dense(512, activation='relu',
+                            kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
+    x = tf.keras.layers.Dropout(0.3)(x)
+    
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.Dense(256, activation='relu',
+                            kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
+    x = tf.keras.layers.Dropout(0.2)(x)
+    
+    x = tf.keras.layers.BatchNormalization()(x)
+    
+    # Final layer with float32
+    outputs = tf.cast(
+        tf.keras.layers.Dense(6, activation='softmax',
+                            kernel_regularizer=tf.keras.regularizers.l2(0.01))(x),
+        dtype=tf.float32
+    )
+    
+    model = tf.keras.Model(inputs, outputs)
+    
+    # Compile with mixed precision
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+        loss='categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    
+    return model
+
 @st.cache_resource
 def load_classification_model():
-    """Load the trained model with proper version handling"""
+    """Load or create the model"""
     try:
-        model_path = 'best_vgg16.keras'
-        if not os.path.exists(model_path):
-            st.error(f"Model file not found at {model_path}")
-            return None
-
-        # Custom objects for Keras 3.5.0 compatibility
-        custom_objects = {
-            'Cast': tf.cast,
-            'DTypePolicy': tf.keras.mixed_precision.Policy
-        }
+        # Create model with mixed precision
+        model = create_model()
         
-        # Load model with custom objects
-        model = keras.models.load_model(
-            model_path,
-            custom_objects=custom_objects,
-            compile=False
-        )
-        
-        # Recompile model
-        model.compile(
-            optimizer=keras.optimizers.Adam(learning_rate=1e-4),
-            loss='categorical_crossentropy',
-            metrics=['accuracy']
-        )
+        # Load weights if they exist
+        if os.path.exists('best_vgg16.keras'):
+            model.load_weights('best_vgg16.keras')
+            st.success("Model weights loaded successfully!")
+        else:
+            st.warning("Using base model without custom weights.")
         
         return model
+        
     except Exception as e:
-        st.error(f"Error loading model: {str(e)}")
-        st.error("Please ensure you have Keras 3.5.0 installed")
+        st.error(f"Error initializing model: {str(e)}")
         return None
 
 def preprocess_image(image):
@@ -63,14 +102,14 @@ def preprocess_image(image):
         # Convert to RGB if needed
         if image.mode != 'RGB':
             image = image.convert('RGB')
-            
+        
         # Resize image
         image = image.resize(IMAGE_SIZE, Image.Resampling.LANCZOS)
         
         # Convert to array and preprocess
         img_array = np.array(image, dtype=np.float32)
         
-        # Normalize to [0,1]
+        # Normalize
         img_array = img_array / 255.0
         
         # Add batch dimension
@@ -114,12 +153,16 @@ def main():
     st.title("Scene Classification using VGG16")
     st.write("Upload an image of a scene to classify it into one of six categories: buildings, forest, glacier, mountain, sea, or street.")
     
+    # Display version information
+    st.sidebar.write(f"TensorFlow version: {tf.__version__}")
+    st.sidebar.write(f"Keras version: {tf.keras.__version__}")
+    
     # Load model
     with st.spinner("Loading model..."):
         model = load_classification_model()
     
     if model is None:
-        st.error("Failed to initialize the model. Please check your Keras version and model file.")
+        st.error("Failed to initialize the model.")
         return
     
     # File uploader
