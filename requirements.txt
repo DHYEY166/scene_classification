@@ -1,0 +1,5 @@
+numpy==2.2.0
+Pillow==11.0.0
+streamlit==1.41.1
+tensorflow==2.15.0
+tensorflow_macos==2.15.0
