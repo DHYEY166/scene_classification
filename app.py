@@ -1,12 +1,17 @@
 # app.py
 import streamlit as st
 import tensorflow as tf
+import keras
+from keras import layers
 import numpy as np
 import pandas as pd
 from PIL import Image
-import io
+import os
 
-# Configure Streamlit page
+print(f"TensorFlow version: {tf.__version__}")
+print(f"Keras version: {keras.__version__}")
+
+# Set page configuration
 st.set_page_config(
     page_title="Scene Classification App",
     page_icon="🌄",
@@ -18,53 +23,38 @@ IMAGE_SIZE = (224, 224)
 CLASS_NAMES = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street']
 
 @st.cache_resource
-def create_model():
-    """Create and return the VGG16-based model"""
+def load_classification_model():
+    """Load the trained model with proper version handling"""
     try:
-        # Load base VGG16 model
-        base_model = tf.keras.applications.VGG16(
-            weights='imagenet',
-            include_top=False,
-            input_shape=(224, 224, 3)
+        model_path = 'best_vgg16.keras'
+        if not os.path.exists(model_path):
+            st.error(f"Model file not found at {model_path}")
+            return None
+
+        # Custom objects for Keras 3.5.0 compatibility
+        custom_objects = {
+            'Cast': tf.cast,
+            'DTypePolicy': tf.keras.mixed_precision.Policy
+        }
+        
+        # Load model with custom objects
+        model = keras.models.load_model(
+            model_path,
+            custom_objects=custom_objects,
+            compile=False
         )
         
-        # Freeze base layers
-        base_model.trainable = False
-        
-        # Create new model
-        inputs = tf.keras.Input(shape=(224, 224, 3))
-        
-        # Preprocess input
-        x = tf.keras.applications.vgg16.preprocess_input(inputs)
-        
-        # Pass through VGG16 base
-        x = base_model(x, training=False)
-        
-        # Add custom top layers
-        x = tf.keras.layers.GlobalAveragePooling2D()(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Dense(512, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
-        x = tf.keras.layers.Dropout(0.3)(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
-        x = tf.keras.layers.Dropout(0.2)(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        outputs = tf.keras.layers.Dense(len(CLASS_NAMES), activation='softmax')(x)
-        
-        # Create model
-        model = tf.keras.Model(inputs, outputs)
-        
-        # Compile model
+        # Recompile model
         model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+            optimizer=keras.optimizers.Adam(learning_rate=1e-4),
             loss='categorical_crossentropy',
             metrics=['accuracy']
         )
         
         return model
-        
     except Exception as e:
-        st.error(f"Error creating model: {str(e)}")
+        st.error(f"Error loading model: {str(e)}")
+        st.error("Please ensure you have Keras 3.5.0 installed")
         return None
 
 def preprocess_image(image):
@@ -77,14 +67,14 @@ def preprocess_image(image):
         # Resize image
         image = image.resize(IMAGE_SIZE, Image.Resampling.LANCZOS)
         
-        # Convert to array
-        img_array = np.array(image)
+        # Convert to array and preprocess
+        img_array = np.array(image, dtype=np.float32)
+        
+        # Normalize to [0,1]
+        img_array = img_array / 255.0
         
         # Add batch dimension
         img_array = np.expand_dims(img_array, axis=0)
-        
-        # Convert to float32
-        img_array = img_array.astype('float32')
         
         return img_array
         
@@ -99,7 +89,7 @@ def predict_scene(model, image):
         img_array = preprocess_image(image)
         if img_array is None:
             return None, None, None
-            
+        
         # Make prediction
         predictions = model.predict(img_array, verbose=0)
         
@@ -124,12 +114,12 @@ def main():
     st.title("Scene Classification using VGG16")
     st.write("Upload an image of a scene to classify it into one of six categories: buildings, forest, glacier, mountain, sea, or street.")
     
-    # Load or create model
+    # Load model
     with st.spinner("Loading model..."):
-        model = create_model()
+        model = load_classification_model()
     
     if model is None:
-        st.error("Failed to initialize the model. Please try refreshing the page.")
+        st.error("Failed to initialize the model. Please check your Keras version and model file.")
         return
     
     # File uploader
@@ -148,7 +138,7 @@ def main():
             with col1:
                 st.subheader("Uploaded Image")
                 image = Image.open(uploaded_file)
-                st.image(image, caption="Uploaded Scene", use_container_width=True)
+                st.image(image, caption="Uploaded Scene", use_column_width=True)
             
             # Make prediction
             with st.spinner("Analyzing image..."):
