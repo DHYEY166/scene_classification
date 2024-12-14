@@ -148,7 +148,7 @@ def main():
             with col1:
                 st.subheader("Uploaded Image")
                 image = Image.open(uploaded_file)
-                st.image(image, caption="Uploaded Scene", use_column_width=True)
+                st.image(image, caption="Uploaded Scene", use_container_width=True)
             
             # Make prediction
             with st.spinner("Analyzing image..."):
