@@ -64,7 +64,7 @@ def load_classification_model():
                 st.warning(f"Could not load custom weights: {str(e)}")
                 st.info("Using base model with ImageNet weights.")
         else:
-            st.warning("Model weights file not found. Using base model with ImageNet weights.")
+            st.warning(" ")
         
         return model
     except Exception as e:
