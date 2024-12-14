@@ -34,7 +34,23 @@ def create_scene_model():
         tf.keras.layers.InputLayer(input_shape=(224, 224, 3)),
         
         # VGG16 base
-        base_model
+        base_model,
+        
+        # Additional layers
+        tf.keras.layers.GlobalAveragePooling2D(),
+        tf.keras.layers.BatchNormalization(),
+        
+        # Dense layers
+        tf.keras.layers.Dense(512, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.01)),
+        tf.keras.layers.Dropout(0.3),
+        tf.keras.layers.BatchNormalization(),
+        
+        tf.keras.layers.Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.01)),
+        tf.keras.layers.Dropout(0.2),
+        tf.keras.layers.BatchNormalization(),
+        
+        # Output layer
+        tf.keras.layers.Dense(len(CLASS_NAMES), activation='softmax', kernel_regularizer=tf.keras.regularizers.l2(0.01))
     ])
     
     # Compile model
@@ -61,10 +77,9 @@ def load_classification_model():
                 model.load_weights(weights_path)
                 st.success("Custom weights loaded successfully!")
             except Exception as e:
-                st.warning(f" ")
-                st.info(" ")
+                print(" ")
         else:
-            st.warning(" ")
+            st.warning("Model weights file not found. Using base model with ImageNet weights.")
         
         return model
     except Exception as e:
