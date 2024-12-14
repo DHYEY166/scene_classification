@@ -17,43 +17,28 @@ IMAGE_SIZE = (224, 224)
 CLASS_NAMES = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street']
 
 def create_scene_model():
-    """Create VGG16-based model with proper initialization"""
-    # Load VGG16 with pretrained weights
+    """Create VGG16-based model"""
     base_model = tf.keras.applications.VGG16(
         weights='imagenet',
         include_top=False,
         input_shape=(224, 224, 3)
     )
-    
-    # Freeze the base model layers
     base_model.trainable = False
     
-    # Build the complete model
     model = tf.keras.Sequential([
-        # Input layer
         tf.keras.layers.InputLayer(input_shape=(224, 224, 3)),
-        
-        # VGG16 base
         base_model,
-        
-        # Additional layers
         tf.keras.layers.GlobalAveragePooling2D(),
         tf.keras.layers.BatchNormalization(),
-        
-        # Dense layers
         tf.keras.layers.Dense(512, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.01)),
         tf.keras.layers.Dropout(0.3),
         tf.keras.layers.BatchNormalization(),
-        
         tf.keras.layers.Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.01)),
         tf.keras.layers.Dropout(0.2),
         tf.keras.layers.BatchNormalization(),
-        
-        # Output layer
-        tf.keras.layers.Dense(len(CLASS_NAMES), activation='softmax', kernel_regularizer=tf.keras.regularizers.l2(0.01))
+        tf.keras.layers.Dense(len(CLASS_NAMES), activation='softmax')
     ])
     
-    # Compile model
     model.compile(
         optimizer=tf.keras.optimizers.Adam(1e-4),
         loss='categorical_crossentropy',
@@ -62,26 +47,72 @@ def create_scene_model():
     
     return model
 
+def try_load_model(model_path):
+    """Try different methods to load the model"""
+    st.write("Attempting to load model...")
+    
+    try:
+        # Method 1: Try loading as SavedModel
+        st.write("Trying to load as SavedModel...")
+        if os.path.isdir(model_path.replace('.keras', '')):
+            model = tf.keras.models.load_model(model_path.replace('.keras', ''))
+            st.success("Successfully loaded model as SavedModel!")
+            return model
+    except Exception as e:
+        st.write(f"SavedModel loading failed: {str(e)}")
+
+    try:
+        # Method 2: Try loading as Keras model with custom objects
+        st.write("Trying to load as Keras model with custom objects...")
+        custom_objects = {
+            'CustomLoss': tf.keras.losses.CategoricalCrossentropy,
+            'CustomMetric': tf.keras.metrics.CategoricalAccuracy
+        }
+        model = tf.keras.models.load_model(model_path, custom_objects=custom_objects)
+        st.success("Successfully loaded model with custom objects!")
+        return model
+    except Exception as e:
+        st.write(f"Keras model loading failed: {str(e)}")
+
+    try:
+        # Method 3: Try loading just weights
+        st.write("Trying to load weights into fresh model...")
+        model = create_scene_model()
+        model.load_weights(model_path)
+        st.success("Successfully loaded weights into fresh model!")
+        return model
+    except Exception as e:
+        st.write(f"Weight loading failed: {str(e)}")
+    
+    try:
+        # Method 4: Try loading weights from HDF5 if exists
+        h5_path = model_path.replace('.keras', '.h5')
+        if os.path.exists(h5_path):
+            st.write("Trying to load HDF5 weights...")
+            model = create_scene_model()
+            model.load_weights(h5_path)
+            st.success("Successfully loaded HDF5 weights!")
+            return model
+    except Exception as e:
+        st.write(f"HDF5 loading failed: {str(e)}")
+    
+    # If all attempts fail, create new model with ImageNet weights
+    st.warning("All loading attempts failed. Creating new model with ImageNet weights.")
+    return create_scene_model()
+
 @st.cache_resource
 def load_classification_model():
-    """Load or create the model"""
+    """Load or create the model with multiple fallback options"""
     try:
-        # Create base model
-        model = create_scene_model()
+        model_path = 'best_vgg16.keras'
         
-        # Load custom weights if available
-        weights_path = 'best_vgg16.keras'
-        if os.path.exists(weights_path):
-            try:
-                # Try loading weights
-                model.load_weights(weights_path)
-                st.success("Custom weights loaded successfully!")
-            except Exception as e:
-                st.warning(f"Could not load custom weights: {str(e)}")
-                st.info("Using base model with ImageNet weights.")
-        else:
-            st.warning("Model weights file not found. Using base model with ImageNet weights.")
+        # Try different loading methods
+        model = try_load_model(model_path)
         
+        if model is None:
+            st.error("Failed to initialize model")
+            return None
+            
         return model
     except Exception as e:
         st.error(f"Error initializing model: {str(e)}")
@@ -100,7 +131,7 @@ def preprocess_image(image):
         # Convert to array
         img_array = np.array(image, dtype=np.float32)
         
-        # Preprocess input (scale to [0, 1])
+        # Normalize
         img_array = img_array / 255.0
         
         # Add batch dimension
@@ -142,8 +173,11 @@ def main():
     st.title("Scene Classification using VGG16")
     st.write("Upload an image of a scene to classify it into one of six categories: buildings, forest, glacier, mountain, sea, or street.")
     
-    # Display version info in sidebar
-    st.sidebar.write(f"TensorFlow version: {tf.__version__}")
+    # Show debug info in sidebar
+    with st.sidebar:
+        st.subheader("Debug Information")
+        st.write(f"TensorFlow version: {tf.__version__}")
+        st.write(f"Keras version: {tf.keras.__version__}")
     
     # Load model
     with st.spinner("Loading model..."):
@@ -193,8 +227,6 @@ def main():
                     
                     # Display probability bar chart
                     st.subheader("Class Probabilities")
-                    
-                    # Create and sort DataFrame
                     probabilities_df = pd.DataFrame({
                         'Class': list(class_probabilities.keys()),
                         'Probability': list(class_probabilities.values())
@@ -202,7 +234,6 @@ def main():
                     probabilities_df['Class'] = probabilities_df['Class'].str.title()
                     probabilities_df = probabilities_df.sort_values('Probability', ascending=True)
                     
-                    # Create bar chart
                     st.bar_chart(
                         probabilities_df.set_index('Class'),
                         use_container_width=True
