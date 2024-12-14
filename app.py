@@ -61,8 +61,8 @@ def load_classification_model():
                 model.load_weights(weights_path)
                 st.success("Custom weights loaded successfully!")
             except Exception as e:
-                st.warning(f"Could not load custom weights: {str(e)}")
-                st.info("Using base model with ImageNet weights.")
+                st.warning(f" ")
+                st.info(" ")
         else:
             st.warning(" ")
         
