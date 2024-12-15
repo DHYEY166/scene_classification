@@ -1,37 +1,27 @@
+# app.py
 import streamlit as st
 import tensorflow as tf
 from tensorflow.keras.applications import VGG16
 from tensorflow.keras.applications.vgg16 import preprocess_input
-from tensorflow.keras.models import Model, load_model
+from tensorflow.keras.models import Model, model_from_json
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout, BatchNormalization
 import numpy as np
 import pandas as pd
 from PIL import Image
 import os
+import json
 
-# Add test image for verification
-test_image = np.random.rand(224, 224, 3)
+# Basic Streamlit config
+st.set_page_config(
+    page_title="Scene Classification",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 class ModelLoader:
     @staticmethod
-    def verify_model(model):
-        """Verify model works correctly"""
-        try:
-            # Try to make a prediction
-            test_input = np.expand_dims(test_image, axis=0)
-            prediction = model.predict(test_input, verbose=0)
-            
-            # Check prediction shape
-            if prediction.shape[1] != 6:  # Should have 6 classes
-                return False, "Invalid model output shape"
-                
-            return True, "Model verified successfully"
-        except Exception as e:
-            return False, str(e)
-
-    @staticmethod
-    def create_model():
-        """Create new model with ImageNet weights"""
+    def create_base_model():
+        """Create model with exact architecture matching saved model"""
         try:
             base_model = VGG16(
                 weights='imagenet',
@@ -40,18 +30,21 @@ class ModelLoader:
             )
             base_model.trainable = False
             
+            inputs = base_model.input
             x = base_model.output
-            x = GlobalAveragePooling2D()(x)
-            x = BatchNormalization()(x)
-            x = Dense(512, activation='relu')(x)
-            x = Dropout(0.3)(x)
-            x = BatchNormalization()(x)
-            x = Dense(256, activation='relu')(x)
-            x = Dropout(0.2)(x)
-            x = BatchNormalization()(x)
-            outputs = Dense(6, activation='softmax')(x)
+            x = GlobalAveragePooling2D(name='global_average_pooling2d')(x)
+            x = BatchNormalization(name='batch_normalization')(x)
+            x = Dense(512, activation='relu', name='dense')(x)
+            x = Dropout(0.3, name='dropout')(x)
+            x = BatchNormalization(name='batch_normalization_1')(x)
+            x = Dense(256, activation='relu', name='dense_1')(x)
+            x = Dropout(0.2, name='dropout_1')(x)
+            x = BatchNormalization(name='batch_normalization_2')(x)
+            outputs = Dense(6, activation='softmax', name='dense_2')(x)
             
-            model = Model(inputs=base_model.input, outputs=outputs)
+            model = Model(inputs=inputs, outputs=outputs, name='scene_classifier')
+            
+            # Compile model
             model.compile(
                 optimizer='adam',
                 loss='categorical_crossentropy',
@@ -63,80 +56,128 @@ class ModelLoader:
             return None, f"Error creating model: {str(e)}"
 
     @staticmethod
-    def load_saved_model():
-        """Try to load saved model"""
-        model_files = [
-            'best_vgg16.keras',
-            'best_vgg16.h5',
-            'best_vgg16_weights.h5'
-        ]
-        
-        for file_path in model_files:
-            if os.path.exists(file_path):
-                try:
-                    st.info(f"Attempting to load model from {file_path}...")
-                    
-                    if file_path.endswith('_weights.h5'):
-                        # Load weights into new model
-                        model, msg = ModelLoader.create_model()
-                        if model is None:
-                            continue
-                        model.load_weights(file_path)
-                    else:
-                        # Load complete model
-                        model = load_model(file_path)
-                    
-                    # Verify model
-                    is_valid, msg = ModelLoader.verify_model(model)
-                    if is_valid:
-                        st.success(f"Successfully loaded and verified model from {file_path}")
-                        return model
-                    else:
-                        st.warning(f"Model validation failed: {msg}")
-                except Exception as e:
-                    st.warning(f"Error loading {file_path}: {str(e)}")
-                    continue
-        
-        # If no saved model works, create new one
-        st.warning("No valid saved model found. Creating new model...")
-        model, msg = ModelLoader.create_model()
-        if model is not None:
-            st.success(msg)
-        return model
+    def load_model_from_json_weights():
+        """Load model from separate architecture and weights files"""
+        try:
+            # Try to load architecture from JSON
+            if os.path.exists('scene_classifier.json'):
+                st.info("Loading model architecture from JSON...")
+                with open('scene_classifier.json', 'r') as f:
+                    model_json = f.read()
+                model = model_from_json(model_json)
+                
+                # Try to load weights
+                if os.path.exists('scene_classifier.weights.h5'):
+                    st.info("Loading model weights...")
+                    model.load_weights('scene_classifier.weights.h5')
+                    model.compile(
+                        optimizer='adam',
+                        loss='categorical_crossentropy',
+                        metrics=['accuracy']
+                    )
+                    st.success("Successfully loaded model from JSON and weights")
+                    return model
+            
+            st.warning("Could not find architecture or weights files")
+            return None
+            
+        except Exception as e:
+            st.error(f"Error loading model from JSON/weights: {str(e)}")
+            return None
+
+    @staticmethod
+    def verify_model(model):
+        """Verify model works correctly"""
+        try:
+            # Create test input
+            test_input = np.random.rand(1, 224, 224, 3)
+            
+            # Try prediction
+            prediction = model.predict(test_input, verbose=0)
+            
+            # Verify output shape
+            if prediction.shape != (1, 6):
+                return False, "Invalid output shape"
+            
+            # Verify output is valid probability distribution
+            if not np.allclose(np.sum(prediction), 1.0):
+                return False, "Invalid probability distribution"
+                
+            return True, "Model verified successfully"
+        except Exception as e:
+            return False, f"Model verification failed: {str(e)}"
 
 @st.cache_resource
 def load_classification_model():
-    """Load model with validation"""
-    return ModelLoader.load_saved_model()
+    """Load and verify model"""
+    try:
+        # First try loading from JSON/weights
+        model = ModelLoader.load_model_from_json_weights()
+        
+        if model is not None:
+            # Verify loaded model
+            is_valid, msg = ModelLoader.verify_model(model)
+            if is_valid:
+                st.success("Successfully loaded and verified saved model")
+                return model
+            else:
+                st.warning(f"Saved model verification failed: {msg}")
+        
+        # If loading saved model fails, create new one
+        st.info("Creating new model with ImageNet weights...")
+        model, msg = ModelLoader.create_base_model()
+        
+        if model is not None:
+            is_valid, verify_msg = ModelLoader.verify_model(model)
+            if is_valid:
+                st.success(msg)
+                return model
+            else:
+                st.error(f"Model verification failed: {verify_msg}")
+                return None
+        else:
+            st.error(msg)
+            return None
+            
+    except Exception as e:
+        st.error(f"Error in model loading: {str(e)}")
+        return None
 
 def preprocess_image(image):
     """Preprocess image for prediction"""
     try:
+        # Convert to RGB if needed
         if image.mode != 'RGB':
             image = image.convert('RGB')
+            
+        # Resize image
         image = image.resize((224, 224))
+        
+        # Convert to array and preprocess
         img_array = np.array(image)
         img_array = np.expand_dims(img_array, axis=0)
-        return preprocess_input(img_array)
+        preprocessed = preprocess_input(img_array)
+        
+        return preprocessed
     except Exception as e:
         st.error(f"Error preprocessing image: {str(e)}")
         return None
 
 def predict_scene(model, image):
-    """Make prediction with error handling"""
+    """Make prediction on image"""
     try:
+        # Class names
         classes = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street']
+        
+        # Preprocess image
         preprocessed = preprocess_image(image)
         if preprocessed is None:
             return None
             
+        # Make prediction
         predictions = model.predict(preprocessed, verbose=0)
         
-        # Validate predictions
-        if not isinstance(predictions, np.ndarray) or predictions.shape[1] != len(classes):
-            st.error("Invalid prediction format")
-            return None
-            
+        # Create results dictionary
         results = {
             class_name: float(pred)
             for class_name, pred in zip(classes, predictions[0])
@@ -148,15 +189,16 @@ def predict_scene(model, image):
         return None
 
 def main():
+    # App title and description
     st.title("Scene Classification using VGG16")
     st.write("Upload an image to classify scenes into: buildings, forest, glacier, mountain, sea, or street")
     
-    # Debug info
+    # Debug info in sidebar
     with st.sidebar:
         st.subheader("Debug Information")
         st.write(f"TensorFlow version: {tf.__version__}")
         
-        # Model info
+        # Show model details if requested
         if st.checkbox("Show model details"):
             model = load_classification_model()
             if model is not None:
@@ -178,28 +220,36 @@ def main():
     )
     
     if uploaded_file is not None:
+        # Create columns for layout
         col1, col2 = st.columns(2)
         
+        # Display uploaded image
         with col1:
             st.subheader("Uploaded Image")
             image = Image.open(uploaded_file)
             st.image(image, use_column_width=True)
         
+        # Make and display prediction
         with col2:
             st.subheader("Prediction Results")
             predictions = predict_scene(model, image)
             
             if predictions:
+                # Get top prediction
                 top_class = max(predictions.items(), key=lambda x: x[1])
+                
+                # Display results
                 st.markdown(f"### Predicted Class: **{top_class[0].title()}**")
                 st.markdown(f"### Confidence: **{top_class[1]:.2%}**")
                 
+                # Create DataFrame for visualization
                 df = pd.DataFrame(
                     list(predictions.items()),
                     columns=['Class', 'Probability']
                 )
                 df = df.sort_values('Probability', ascending=True)
                 
+                # Show probabilities
                 st.subheader("Class Probabilities")
                 st.bar_chart(df.set_index('Class'))
 
