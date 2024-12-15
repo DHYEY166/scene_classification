@@ -1,6 +1,6 @@
 numpy==1.23.5
 pandas==1.5.3
 Pillow==9.5.0
-streamlit==1.22.0  # Using older version that works with protobuf 3.19.6
+streamlit==1.22.0
 tensorflow-cpu==2.11.0
 protobuf==3.19.6
