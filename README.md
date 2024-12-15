@@ -13,7 +13,6 @@ project_directory/
 │   └── seg_test.zip
 ├── notebooks/
 │   ├── scene_classification.ipynb     # Main implementation (VGG16, ResNet50, ResNet101, EfficientNetB0)
-│   ├── efficientnet_modified.ipynb    # Modified EfficientNetB0 implementation
 │   └── app.py                        # Streamlit application
 └── README.md
 ```
