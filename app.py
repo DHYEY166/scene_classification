@@ -66,10 +66,11 @@ def load_model():
             return None
             
         # Try to load saved weights
-        if os.path.exists('scene_classifier.weights.h5'):
+        weights_path = 'scene_classifier_full.weights.h5'  # Updated path
+        if os.path.exists(weights_path):
             try:
                 st.info("Loading saved weights...")
-                model.load_weights('scene_classifier.weights.h5')
+                model.load_weights(weights_path, by_name=True)
                 st.success("Successfully loaded saved weights")
             except Exception as e:
                 st.warning(f"Could not load weights: {str(e)}")
