@@ -66,7 +66,7 @@ def load_model():
             return None
             
         # Load custom weights if available
-        weights_path = 'vgg16.weights.h5'
+        weights_path = 'vgg16_complete.weights.h5'
         if not os.path.exists(weights_path):
             st.error(f"Weights file not found at: {weights_path}")
             return None
