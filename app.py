@@ -50,29 +50,6 @@ def create_model():
         outputs = Dense(6, activation='softmax', name='predictions')(x)
         
         model = Model(inputs=base_model.input, outputs=outputs)
-        return model
-    
-    except Exception as e:
-        st.error(f"Error creating model: {str(e)}")
-        return None
-
-@st.cache_resource
-def load_model():
-    """Load model with weights"""
-    try:
-        # Create model
-        model = create_model()
-        if model is None:
-            return None
-            
-        # Load custom weights if available
-        weights_path = 'vgg16_complete.weights.h5'
-        if not os.path.exists(weights_path):
-            st.error(f"Weights file not found at: {weights_path}")
-            return None
-            
-        # Load weights by name
-        model.load_weights(weights_path, by_name=True)
         
         # Compile model
         model.compile(
@@ -81,6 +58,55 @@ def load_model():
             metrics=['accuracy']
         )
         
+        return model
+    
+    except Exception as e:
+        st.error(f"Error creating model: {str(e)}")
+        return None
+
+def try_load_weights(model, weights_path):
+    """Try different methods to load weights"""
+    # List of weight file names to try
+    weight_files = [
+        'vgg16_complete.weights.h5',
+        'best_vgg16.keras',
+        'best_vgg16.h5',
+        weights_path
+    ]
+    
+    for file_path in weight_files:
+        if os.path.exists(file_path):
+            try:
+                # Try loading weights by name
+                st.info(f"Attempting to load weights from: {file_path}")
+                model.load_weights(file_path, by_name=True)
+                st.success(f"Successfully loaded weights from: {file_path}")
+                return True
+            except tf.errors.OpError as e:
+                st.warning(f"TensorFlow error loading {file_path}: {str(e)}")
+                continue
+            except Exception as e:
+                st.warning(f"Error loading {file_path}: {str(e)}")
+                continue
+    
+    return False
+
+@st.cache_resource
+def load_model():
+    """Load model with weights"""
+    try:
+        # Create model
+        st.info("Creating base model...")
+        model = create_model()
+        if model is None:
+            return None
+        
+        # Try to load weights
+        weights_loaded = try_load_weights(model, 'vgg16_complete.weights.h5')
+        
+        if not weights_loaded:
+            st.warning("Could not load custom weights. Using ImageNet weights.")
+            
         return model
         
     except Exception as e:
@@ -141,6 +167,12 @@ def predict(model, image):
 def main():
     """Main app function"""
     try:
+        # Show debug info in sidebar
+        with st.sidebar:
+            st.subheader("Debug Information")
+            st.write(f"TensorFlow version: {tf.__version__}")
+            st.write(f"Keras version: {tf.keras.__version__}")
+        
         # Load model
         model = load_model()
         if model is None:
