@@ -1,6 +1,6 @@
-numpy==2.2.0
-pandas==2.2.3
-Pillow==11.0.0
-streamlit==1.41.1
-tensorflow==2.15.0
-tensorflow_macos==2.15.0
+# requirements.txt
+numpy==1.24.3
+pandas==2.0.3
+Pillow==9.5.0
+streamlit==1.24.0
+tensorflow==2.13.0
