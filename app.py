@@ -26,22 +26,25 @@ with st.sidebar:
     st.subheader("Debug Information")
     st.write(f"TensorFlow version: {tf.__version__}")
 
-def create_model():
-    """Create the VGG16 model architecture with ImageNet weights"""
+def create_model(weights='imagenet'):
+    """Create the VGG16 model architecture with proper weight initialization"""
     try:
-        # Load VGG16 with pre-trained weights
+        # Load VGG16 with imagenet weights
         base_model = VGG16(
-            weights='imagenet',
+            weights=weights,
             include_top=False,
             input_shape=(224, 224, 3)
         )
         
-        # Freeze VGG16 layers
+        # Freeze base model layers
         base_model.trainable = False
         
-        # Add custom layers
+        # Create top model
+        inputs = base_model.input
         x = base_model.output
-        x = GlobalAveragePooling2D()(x)
+        
+        # Add custom layers
+        x = GlobalAveragePooling2D(name='custom_gap')(x)
         x = BatchNormalization(name='custom_bn_1')(x)
         
         x = Dense(512, activation='relu', name='custom_dense_1')(x)
@@ -54,7 +57,8 @@ def create_model():
         
         outputs = Dense(6, activation='softmax', name='predictions')(x)
         
-        model = Model(inputs=base_model.input, outputs=outputs)
+        # Create model
+        model = Model(inputs=inputs, outputs=outputs)
         
         # Compile model
         model.compile(
@@ -69,47 +73,62 @@ def create_model():
         st.error(f"Error creating model: {str(e)}")
         return None
 
-def try_load_weights(model, weights_path):
-    """Try different methods to load weights"""
-    try:
-        if os.path.exists(weights_path):
-            st.info(f"Attempting to load weights from: {weights_path}")
-            model.load_weights(weights_path, by_name=True)
-            st.success(f"Successfully loaded weights from: {weights_path}")
-            return True
-    except Exception as e:
-        st.warning(f"Error loading weights from {weights_path}: {str(e)}")
+def try_load_custom_weights(model):
+    """Try to load just the custom layer weights"""
+    weight_files = [
+        'vgg16_complete.weights.h5',
+        'best_vgg16.keras',
+        'best_vgg16.h5'
+    ]
     
-    # Try alternative weight files
-    alt_files = ['best_vgg16.keras', 'best_vgg16.h5', 'vgg16_complete.weights.h5']
-    for file_path in alt_files:
-        try:
-            if os.path.exists(file_path):
-                st.info(f"Attempting to load weights from: {file_path}")
-                model.load_weights(file_path, by_name=True)
-                st.success(f"Successfully loaded weights from: {file_path}")
+    custom_layer_names = [
+        'custom_gap',
+        'custom_bn_1',
+        'custom_dense_1',
+        'custom_dropout_1',
+        'custom_bn_2',
+        'custom_dense_2',
+        'custom_dropout_2',
+        'custom_bn_3',
+        'predictions'
+    ]
+    
+    for weights_path in weight_files:
+        if os.path.exists(weights_path):
+            try:
+                st.info(f"Attempting to load custom weights from: {weights_path}")
+                
+                # Try to load weights only for custom layers
+                model.load_weights(
+                    weights_path,
+                    by_name=True,
+                    skip_mismatch=True
+                )
+                
+                st.success(f"Successfully loaded weights from: {weights_path}")
                 return True
-        except Exception as e:
-            st.warning(f"Error loading weights from {file_path}: {str(e)}")
-            continue
+            except Exception as e:
+                st.warning(f"Error loading weights from {weights_path}: {str(e)}")
+                continue
     
     return False
 
 @st.cache_resource
 def load_model():
-    """Load model with weights"""
+    """Load model with proper weight initialization"""
     try:
-        # Create model
-        st.info("Creating base model...")
-        model = create_model()
+        # Create model with ImageNet weights for base layers
+        st.info("Creating model with ImageNet weights...")
+        model = create_model(weights='imagenet')
+        
         if model is None:
             return None
         
-        # Try to load weights
-        weights_loaded = try_load_weights(model, 'vgg16_complete.weights.h5')
+        # Try to load custom top layer weights
+        weights_loaded = try_load_custom_weights(model)
         
         if not weights_loaded:
-            st.warning("Could not load custom weights. Using ImageNet weights.")
+            st.warning("Could not load custom weights. Using initialization weights.")
             
         return model
         
