@@ -21,6 +21,11 @@ st.set_page_config(
 st.title("Scene Classification using VGG16")
 st.write("Upload an image to classify scenes into: buildings, forest, glacier, mountain, sea, or street")
 
+# Debug info in sidebar
+with st.sidebar:
+    st.subheader("Debug Information")
+    st.write(f"TensorFlow version: {tf.__version__}")
+
 def create_model():
     """Create the VGG16 model architecture with ImageNet weights"""
     try:
@@ -66,28 +71,27 @@ def create_model():
 
 def try_load_weights(model, weights_path):
     """Try different methods to load weights"""
-    # List of weight file names to try
-    weight_files = [
-        'vgg16_complete.weights.h5',
-        'best_vgg16.keras',
-        'best_vgg16.h5',
-        weights_path
-    ]
+    try:
+        if os.path.exists(weights_path):
+            st.info(f"Attempting to load weights from: {weights_path}")
+            model.load_weights(weights_path, by_name=True)
+            st.success(f"Successfully loaded weights from: {weights_path}")
+            return True
+    except Exception as e:
+        st.warning(f"Error loading weights from {weights_path}: {str(e)}")
     
-    for file_path in weight_files:
-        if os.path.exists(file_path):
-            try:
-                # Try loading weights by name
+    # Try alternative weight files
+    alt_files = ['best_vgg16.keras', 'best_vgg16.h5', 'vgg16_complete.weights.h5']
+    for file_path in alt_files:
+        try:
+            if os.path.exists(file_path):
                 st.info(f"Attempting to load weights from: {file_path}")
                 model.load_weights(file_path, by_name=True)
                 st.success(f"Successfully loaded weights from: {file_path}")
                 return True
-            except tf.errors.OpError as e:
-                st.warning(f"TensorFlow error loading {file_path}: {str(e)}")
-                continue
-            except Exception as e:
-                st.warning(f"Error loading {file_path}: {str(e)}")
-                continue
+        except Exception as e:
+            st.warning(f"Error loading weights from {file_path}: {str(e)}")
+            continue
     
     return False
 
@@ -167,12 +171,6 @@ def predict(model, image):
 def main():
     """Main app function"""
     try:
-        # Show debug info in sidebar
-        with st.sidebar:
-            st.subheader("Debug Information")
-            st.write(f"TensorFlow version: {tf.__version__}")
-            st.write(f"Keras version: {tf.keras.__version__}")
-        
         # Load model
         model = load_model()
         if model is None:
