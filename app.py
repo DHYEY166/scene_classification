@@ -74,43 +74,35 @@ def create_model(weights='imagenet'):
         return None
 
 def try_load_custom_weights(model):
-    """Try to load just the custom layer weights"""
+    """Try to load custom weights or return initialized model"""
     weight_files = [
         'vgg16_complete.weights.h5',
         'best_vgg16.keras',
         'best_vgg16.h5'
     ]
     
-    custom_layer_names = [
-        'custom_gap',
-        'custom_bn_1',
-        'custom_dense_1',
-        'custom_dropout_1',
-        'custom_bn_2',
-        'custom_dense_2',
-        'custom_dropout_2',
-        'custom_bn_3',
-        'predictions'
-    ]
+    # Check if any weight files exist
+    available_files = [f for f in weight_files if os.path.exists(f)]
     
-    for weights_path in weight_files:
-        if os.path.exists(weights_path):
-            try:
-                st.info(f"Attempting to load custom weights from: {weights_path}")
-                
-                # Try to load weights only for custom layers
-                model.load_weights(
-                    weights_path,
-                    by_name=True,
-                    skip_mismatch=True
-                )
-                
-                st.success(f"Successfully loaded weights from: {weights_path}")
-                return True
-            except Exception as e:
-                st.warning(f"Error loading weights from {weights_path}: {str(e)}")
-                continue
-    
+    if not available_files:
+        st.info("No weight files found. Using base model with ImageNet weights.")
+        return False
+        
+    # Try loading available weights
+    for weights_path in available_files:
+        try:
+            st.info(f"Attempting to load weights from: {weights_path}")
+            model.load_weights(
+                weights_path,
+                by_name=True,
+                skip_mismatch=True
+            )
+            return True
+        except Exception as e:
+            st.warning(f"Could not load weights from {weights_path}")
+            continue
+            
+    st.warning("Could not load any weights. Using base model.")
     return False
 
 @st.cache_resource
