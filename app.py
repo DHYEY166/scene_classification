@@ -22,13 +22,27 @@ st.write("Upload an image to classify scenes into: buildings, forest, glacier, m
 def load_model():
     """Load trained VGG16 model"""
     try:
-        model_path = 'vgg16_model.keras'
-        if not os.path.exists(model_path):
-            st.error(f"Model file not found at: {model_path}")
+        # Check for model files
+        if not os.path.exists("vgg16_model_architecture.json") or \
+           not os.path.exists("vgg16_model.weights.h5"):
+            st.error("Model files not found!")
             return None
         
-        # Load the saved model
-        model = tf.keras.models.load_model(model_path)
+        # Load model architecture from JSON
+        with open("vgg16_model_architecture.json", "r") as json_file:
+            model_json = json_file.read()
+        model = tf.keras.models.model_from_json(model_json)
+        
+        # Load weights with correct file name
+        model.load_weights("vgg16_model.weights.h5")
+        
+        # Compile model
+        model.compile(
+            optimizer='adam',
+            loss='categorical_crossentropy',
+            metrics=['accuracy']
+        )
+        
         st.success("Model loaded successfully!")
         return model
     except Exception as e:
