@@ -11,41 +11,6 @@ import pandas as pd
 from PIL import Image
 import os
 
-# Set page configuration
-st.set_page_config(
-    page_title="Scene Classification App",
-    page_icon="🏞️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Custom CSS for essential styling
-st.markdown("""
-<style>
-    .main h1 {
-        color: inherit;
-        margin-bottom: 2rem;
-        text-align: center;
-        padding: 1rem;
-    }
-    
-    .stSpinner > div {
-        border-top-color: #2563EB !important;
-    }
-    
-    .prediction-container {
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        border-radius: 0.5rem;
-    }
-    
-    /* Ensure adequate spacing */
-    .block-container {
-        padding-top: 2rem;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 def create_model():
     """Create identical model architecture"""
     base_model = VGG16(
@@ -77,33 +42,44 @@ def create_model():
 def load_model():
     """Load trained model"""
     try:
+        # Create model architecture
         model = create_model()
+        model.summary()  # Print summary to verify layer count
         
+        # Load weights
         weights_path = 'scene_classifier.weights.h5'
         if not os.path.exists(weights_path):
-            st.error(f"Weights file not found at: {weights_path}")
+            st.error(f"Weights not found at: {weights_path}")
             return None
         
+        # Load weights without by_name parameter
         model.load_weights(weights_path)
         
+        # Compile model
         model.compile(
             optimizer='adam',
             loss='categorical_crossentropy',
             metrics=['accuracy']
         )
         
+        st.success("Model loaded successfully!")
         return model
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
         return None
 
+
 def preprocess_image(image):
     """Preprocess image for prediction"""
     try:
+        # Convert to RGB if needed
         if image.mode != 'RGB':
             image = image.convert('RGB')
         
+        # Resize to match training dimensions
         image = image.resize((224, 224))
+        
+        # Convert to array and preprocess
         img_array = img_to_array(image)
         img_array = np.expand_dims(img_array, axis=0)
         processed_img = preprocess_input(img_array)
@@ -116,14 +92,18 @@ def preprocess_image(image):
 def predict_scene(model, image):
     """Make prediction on image"""
     try:
+        # Class names must match training order
         classes = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street']
         
+        # Preprocess image
         processed_img = preprocess_image(image)
         if processed_img is None:
             return None
         
+        # Make prediction
         predictions = model.predict(processed_img, verbose=0)
         
+        # Create results dictionary
         results = {
             class_name: float(prob)
             for class_name, prob in zip(classes, predictions[0])
@@ -135,108 +115,88 @@ def predict_scene(model, image):
         return None
 
 def main():
-    # Page title
-    st.markdown("<h1>🏞️ Scene Classification AI</h1>", unsafe_allow_html=True)
-    
-    # Sidebar
+    # Add sidebar with info
     with st.sidebar:
-        st.markdown("### 📋 About")
-        st.info("""
-        Welcome to Scene Classification AI!
-        
-        This application uses advanced deep learning to classify scenes 
-        into six different categories. Perfect for photographers, researchers, 
-        and nature enthusiasts.
-        
-        Upload any scene image to get instant classification results!
+        st.subheader("About")
+        st.write("""
+        This app uses a VGG16-based model trained on scene images.
+        The model classifies images into six categories.
         """)
         
-        # Model details in expander
-        with st.expander("🔍 Technical Details"):
-            st.info("""
-            **Model Architecture:**
-            * Base: VGG16
-            * Input Size: 224x224 pixels
-            * Categories: 6 scene types
-            * Technology: Transfer Learning
-            * Backend: TensorFlow 2.x
-            
-            **Supported Categories:**
-            * 🏢 Buildings
-            * 🌲 Forest
-            * ❄️ Glacier
-            * ⛰️ Mountain
-            * 🌊 Sea
-            * 🛣️ Street
+        # Model details
+        if st.checkbox("Show Technical Details"):
+            st.write("""
+            - Base Model: VGG16
+            - Input Size: 224x224
+            - Classes: 6
+            - Training: Transfer Learning
             """)
-    
-    # Main content
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("### 📤 Upload Image")
-        uploaded_file = st.file_uploader(
-            "Choose a scene image to classify",
-            type=['jpg', 'jpeg', 'png'],
-            help="Supported formats: JPG, JPEG, PNG"
-        )
-    
-    with col2:
-        st.markdown("### 💡 Tips")
-        st.info("""
-        For best results:
-        * Use clear, well-lit images
-        * Avoid blurry photos
-        * Center the main scene
-        * Landscape orientation preferred
-        """)
     
     # Load model
     model = load_model()
     if model is None:
         return
-    else:
-        st.success("Model loaded successfully!")
+    
+    # File uploader
+    uploaded_file = st.file_uploader(
+        "Choose an image...",
+        type=['jpg', 'jpeg', 'png'],
+        help="Upload an image of a scene to classify"
+    )
     
     # Process uploaded image
     if uploaded_file is not None:
-        col3, col4 = st.columns(2)
+        # Create two columns
+        col1, col2 = st.columns(2)
         
-        with col3:
-            st.markdown("### 📸 Uploaded Scene")
+        # Display uploaded image
+        with col1:
+            st.subheader("Uploaded Image")
             image = Image.open(uploaded_file)
             st.image(image, use_container_width=True)
         
-        with col4:
-            st.markdown("### 🎯 Analysis Results")
+        # Make and display prediction
+        with col2:
+            st.subheader("Prediction Results")
             
-            with st.spinner('🔄 Analyzing scene...'):
+            with st.spinner('Analyzing image...'):
                 predictions = predict_scene(model, image)
             
             if predictions:
+                # Get top prediction
                 top_class = max(predictions.items(), key=lambda x: x[1])
                 
-                # Use st.success for the prediction box
-                st.success(f"""
-                🎪 **Predicted Scene:** {top_class[0].title()}
-                📊 **Confidence:** {top_class[1]:.1%}
-                """)
+                # Display results in a card-like container
+                st.markdown("""
+                <style>
+                .prediction-box {
+                    padding: 20px;
+                    border-radius: 10px;
+                    background-color: #f0f2f6;
+                    margin-bottom: 20px;
+                }
+                </style>
+                """, unsafe_allow_html=True)
                 
-                # Show all probabilities
-                st.markdown("### 📈 Detailed Analysis")
+                st.markdown('<div class="prediction-box">', unsafe_allow_html=True)
+                st.markdown(f"### Predicted Scene: **{top_class[0].title()}**")
+                st.markdown(f"### Confidence: **{top_class[1]:.2%}**")
+                st.markdown('</div>', unsafe_allow_html=True)
                 
+                # Show all class probabilities
+                st.subheader("Class Probabilities")
+                
+                # Create DataFrame for visualization
                 df = pd.DataFrame(
                     list(predictions.items()),
                     columns=['Class', 'Probability']
                 )
+                
+                # Sort by probability
                 df = df.sort_values('Probability', ascending=True)
                 
-                # Use Streamlit's native chart with custom height
-                st.bar_chart(
-                    df.set_index('Class'),
-                    use_container_width=True,
-                    height=400
-                )
+                # Display bar chart
+                st.bar_chart(df.set_index('Class'))
 
 if __name__ == "__main__":
     main()
