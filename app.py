@@ -19,68 +19,29 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Custom CSS for essential styling
 st.markdown("""
 <style>
-    /* Main container */
-    .main {
-        padding: 2rem;
-    }
-    
-    /* Headers */
     .main h1 {
-        color: #1E3A8A;
+        color: inherit;
         margin-bottom: 2rem;
         text-align: center;
         padding: 1rem;
-        border-bottom: 2px solid #E5E7EB;
     }
     
-    /* Sidebar */
-    .css-1d391kg {
-        padding: 2rem 1rem;
-    }
-    
-    /* Cards */
-    .stMarkdown div {
-        border-radius: 10px;
-    }
-    
-    .prediction-box {
-        background-color: #F3F4F6;
-        padding: 1.5rem;
-        border-radius: 15px;
-        border: 1px solid #E5E7EB;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    }
-    
-    .info-box {
-        background-color: #EFF6FF;
-        padding: 1.5rem;
-        border-radius: 15px;
-        border: 1px solid #BFDBFE;
-        margin-bottom: 1rem;
-    }
-    
-    /* File uploader */
-    .css-1cpxqw2 {
-        border: 2px dashed #CBD5E1;
-        border-radius: 10px;
-        padding: 2rem;
-    }
-    
-    /* Spinner */
     .stSpinner > div {
         border-top-color: #2563EB !important;
     }
     
-    /* Bar chart */
-    .stChart {
-        background-color: white;
-        padding: 1rem;
-        border-radius: 10px;
-        border: 1px solid #E5E7EB;
-        box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    .prediction-container {
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border-radius: 0.5rem;
+    }
+    
+    /* Ensure adequate spacing */
+    .block-container {
+        padding-top: 2rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -116,27 +77,21 @@ def create_model():
 def load_model():
     """Load trained model"""
     try:
-        # Create model architecture
         model = create_model()
-        model.summary()  # Print summary to verify layer count
         
-        # Load weights
         weights_path = 'scene_classifier.weights.h5'
         if not os.path.exists(weights_path):
-            st.error(f"Weights not found at: {weights_path}")
+            st.error(f"Weights file not found at: {weights_path}")
             return None
         
-        # Load weights without by_name parameter
         model.load_weights(weights_path)
         
-        # Compile model
         model.compile(
             optimizer='adam',
             loss='categorical_crossentropy',
             metrics=['accuracy']
         )
         
-        st.success("Model loaded successfully!")
         return model
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
@@ -145,14 +100,10 @@ def load_model():
 def preprocess_image(image):
     """Preprocess image for prediction"""
     try:
-        # Convert to RGB if needed
         if image.mode != 'RGB':
             image = image.convert('RGB')
         
-        # Resize to match training dimensions
         image = image.resize((224, 224))
-        
-        # Convert to array and preprocess
         img_array = img_to_array(image)
         img_array = np.expand_dims(img_array, axis=0)
         processed_img = preprocess_input(img_array)
@@ -165,18 +116,14 @@ def preprocess_image(image):
 def predict_scene(model, image):
     """Make prediction on image"""
     try:
-        # Class names must match training order
         classes = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street']
         
-        # Preprocess image
         processed_img = preprocess_image(image)
         if processed_img is None:
             return None
         
-        # Make prediction
         predictions = model.predict(processed_img, verbose=0)
         
-        # Create results dictionary
         results = {
             class_name: float(prob)
             for class_name, prob in zip(classes, predictions[0])
@@ -188,42 +135,40 @@ def predict_scene(model, image):
         return None
 
 def main():
-    # Page title and description
+    # Page title
     st.markdown("<h1>🏞️ Scene Classification AI</h1>", unsafe_allow_html=True)
     
-    # Add sidebar with info
+    # Sidebar
     with st.sidebar:
         st.markdown("### 📋 About")
-        st.markdown("""
-        <div class='info-box'>
-        This AI-powered application uses advanced deep learning to classify scenes 
+        st.info("""
+        Welcome to Scene Classification AI!
+        
+        This application uses advanced deep learning to classify scenes 
         into six different categories. Perfect for photographers, researchers, 
         and nature enthusiasts.
         
         Upload any scene image to get instant classification results!
-        </div>
-        """, unsafe_allow_html=True)
+        """)
         
-        # Model details
+        # Model details in expander
         with st.expander("🔍 Technical Details"):
-            st.markdown("""
-            <div class='info-box'>
+            st.info("""
+            **Model Architecture:**
+            * Base: VGG16
+            * Input Size: 224x224 pixels
+            * Categories: 6 scene types
+            * Technology: Transfer Learning
+            * Backend: TensorFlow 2.x
             
-            * **Base Model:** VGG16 Architecture
-            * **Input Size:** 224x224 pixels
-            * **Categories:** 6 scene types
-            * **Technology:** Transfer Learning
-            * **Backend:** TensorFlow 2.x
-            
-            Supported scene categories:
+            **Supported Categories:**
             * 🏢 Buildings
             * 🌲 Forest
             * ❄️ Glacier
             * ⛰️ Mountain
             * 🌊 Sea
             * 🛣️ Street
-            </div>
-            """, unsafe_allow_html=True)
+            """)
     
     # Main content
     col1, col2 = st.columns([2, 1])
@@ -238,20 +183,20 @@ def main():
     
     with col2:
         st.markdown("### 💡 Tips")
-        st.markdown("""
-        <div class='info-box'>
-        
+        st.info("""
+        For best results:
         * Use clear, well-lit images
         * Avoid blurry photos
         * Center the main scene
         * Landscape orientation preferred
-        </div>
-        """, unsafe_allow_html=True)
+        """)
     
     # Load model
     model = load_model()
     if model is None:
         return
+    else:
+        st.success("Model loaded successfully!")
     
     # Process uploaded image
     if uploaded_file is not None:
@@ -271,28 +216,26 @@ def main():
             if predictions:
                 top_class = max(predictions.items(), key=lambda x: x[1])
                 
-                # Display results
-                st.markdown(f"""
-                <div class='prediction-box'>
-                    <h3>🎪 Predicted Scene: <span style='color: #2563EB'>{top_class[0].title()}</span></h3>
-                    <h3>📊 Confidence: <span style='color: #2563EB'>{top_class[1]:.1%}</span></h3>
-                </div>
-                """, unsafe_allow_html=True)
+                # Use st.success for the prediction box
+                st.success(f"""
+                🎪 **Predicted Scene:** {top_class[0].title()}
+                📊 **Confidence:** {top_class[1]:.1%}
+                """)
                 
                 # Show all probabilities
                 st.markdown("### 📈 Detailed Analysis")
                 
-                # Create and sort DataFrame
                 df = pd.DataFrame(
                     list(predictions.items()),
                     columns=['Class', 'Probability']
                 )
                 df = df.sort_values('Probability', ascending=True)
                 
-                # Custom chart colors
+                # Use Streamlit's native chart with custom height
                 st.bar_chart(
                     df.set_index('Class'),
-                    use_container_width=True
+                    use_container_width=True,
+                    height=400
                 )
 
 if __name__ == "__main__":
