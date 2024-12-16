@@ -1,40 +1,58 @@
 import streamlit as st
 import tensorflow as tf
+from tensorflow.keras.applications import VGG16
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from tensorflow.keras.applications.vgg16 import preprocess_input
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout, BatchNormalization
+from tensorflow.keras.regularizers import l2
 import numpy as np
 import pandas as pd
 from PIL import Image
 import os
 
-# Page configuration
-st.set_page_config(
-    page_title="Scene Classification",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-# Title and description
-st.title("Scene Classification using VGG16")
-st.write("Upload an image to classify scenes into: buildings, forest, glacier, mountain, sea, or street")
+def create_model():
+    """Recreate the exact same model architecture"""
+    base_model = VGG16(
+        include_top=False,
+        weights='imagenet',
+        input_shape=(224, 224, 3)
+    )
+    
+    base_model.trainable = False
+    
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    x = BatchNormalization()(x)
+    
+    x = Dense(512, activation='relu', kernel_regularizer=l2(0.01))(x)
+    x = Dropout(0.3)(x)
+    x = BatchNormalization()(x)
+    
+    x = Dense(256, activation='relu', kernel_regularizer=l2(0.01))(x)
+    x = Dropout(0.2)(x)
+    x = BatchNormalization()(x)
+    
+    outputs = Dense(6, activation='softmax', kernel_regularizer=l2(0.01))(x)
+    
+    model = Model(inputs=base_model.input, outputs=outputs)
+    return model
 
 @st.cache_resource
 def load_model():
-    """Load trained VGG16 model"""
+    """Load trained model"""
     try:
-        # Check for model files
-        if not os.path.exists("vgg16_model_architecture.json") or \
-           not os.path.exists("vgg16_model.weights.h5"):
-            st.error("Model files not found!")
+        # Create model architecture
+        model = create_model()
+        
+        # Check for weights file
+        weights_path = "vgg16_model.weights.h5"
+        if not os.path.exists(weights_path):
+            st.error(f"Model weights not found at: {weights_path}")
             return None
         
-        # Load model architecture from JSON
-        with open("vgg16_model_architecture.json", "r") as json_file:
-            model_json = json_file.read()
-        model = tf.keras.models.model_from_json(model_json)
-        
-        # Load weights with correct file name
-        model.load_weights("vgg16_model.weights.h5")
+        # Load weights
+        model.load_weights(weights_path)
         
         # Compile model
         model.compile(
@@ -48,6 +66,7 @@ def load_model():
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
         return None
+
 
 def preprocess_image(image):
     """Preprocess image for prediction"""
