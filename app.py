@@ -52,8 +52,8 @@ def load_model():
             st.error(f"Weights not found at: {weights_path}")
             return None
         
-        # Load weights with by_name=True
-        model.load_weights(weights_path, by_name=True)
+        # Load weights without by_name parameter
+        model.load_weights(weights_path)
         
         # Compile model
         model.compile(
