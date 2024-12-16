@@ -22,11 +22,14 @@ st.write("Upload an image to classify scenes into: buildings, forest, glacier, m
 def load_model():
     """Load trained VGG16 model"""
     try:
-        if not os.path.exists('best_vgg16.keras'):
-            st.error("Model file not found! Please ensure 'best_vgg16.keras' is in the same directory.")
+        model_path = 'vgg16_model.keras'
+        if not os.path.exists(model_path):
+            st.error(f"Model file not found at: {model_path}")
             return None
         
-        model = tf.keras.models.load_model('best_vgg16.keras')
+        # Load the saved model
+        model = tf.keras.models.load_model(model_path)
+        st.success("Model loaded successfully!")
         return model
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
