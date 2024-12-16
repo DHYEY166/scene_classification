@@ -13,17 +13,14 @@ import os
 
 def create_model():
     """Create identical model architecture"""
-    # Create base model with same name
     base_model = VGG16(
         include_top=False,
         weights='imagenet',
-        input_shape=(224, 224, 3),
-        name='vgg16_base'
+        input_shape=(224, 224, 3)
     )
     
     base_model.trainable = False
     
-    # Add identical layer names
     x = base_model.output
     x = GlobalAveragePooling2D(name='gap')(x)
     x = BatchNormalization(name='bn_1')(x)
@@ -38,7 +35,7 @@ def create_model():
     
     outputs = Dense(6, activation='softmax', kernel_regularizer=l2(0.01), name='predictions')(x)
     
-    model = Model(inputs=base_model.input, outputs=outputs, name='scene_classifier')
+    model = Model(inputs=base_model.input, outputs=outputs)
     return model
 
 @st.cache_resource
