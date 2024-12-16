@@ -12,30 +12,33 @@ from PIL import Image
 import os
 
 def create_model():
-    """Recreate the exact same model architecture"""
+    """Create identical model architecture"""
+    # Create base model with same name
     base_model = VGG16(
         include_top=False,
         weights='imagenet',
-        input_shape=(224, 224, 3)
+        input_shape=(224, 224, 3),
+        name='vgg16_base'
     )
     
     base_model.trainable = False
     
+    # Add identical layer names
     x = base_model.output
-    x = GlobalAveragePooling2D()(x)
-    x = BatchNormalization()(x)
+    x = GlobalAveragePooling2D(name='gap')(x)
+    x = BatchNormalization(name='bn_1')(x)
     
-    x = Dense(512, activation='relu', kernel_regularizer=l2(0.01))(x)
-    x = Dropout(0.3)(x)
-    x = BatchNormalization()(x)
+    x = Dense(512, activation='relu', kernel_regularizer=l2(0.01), name='dense_1')(x)
+    x = Dropout(0.3, name='dropout_1')(x)
+    x = BatchNormalization(name='bn_2')(x)
     
-    x = Dense(256, activation='relu', kernel_regularizer=l2(0.01))(x)
-    x = Dropout(0.2)(x)
-    x = BatchNormalization()(x)
+    x = Dense(256, activation='relu', kernel_regularizer=l2(0.01), name='dense_2')(x)
+    x = Dropout(0.2, name='dropout_2')(x)
+    x = BatchNormalization(name='bn_3')(x)
     
-    outputs = Dense(6, activation='softmax', kernel_regularizer=l2(0.01))(x)
+    outputs = Dense(6, activation='softmax', kernel_regularizer=l2(0.01), name='predictions')(x)
     
-    model = Model(inputs=base_model.input, outputs=outputs)
+    model = Model(inputs=base_model.input, outputs=outputs, name='scene_classifier')
     return model
 
 @st.cache_resource
@@ -44,15 +47,16 @@ def load_model():
     try:
         # Create model architecture
         model = create_model()
-        
-        # Check for weights file
-        weights_path = "vgg16_model.weights.h5"
-        if not os.path.exists(weights_path):
-            st.error(f"Model weights not found at: {weights_path}")
-            return None
+        model.summary()  # Print summary to verify layer count
         
         # Load weights
-        model.load_weights(weights_path)
+        weights_path = 'scene_classifier.weights.h5'
+        if not os.path.exists(weights_path):
+            st.error(f"Weights not found at: {weights_path}")
+            return None
+        
+        # Load weights with by_name=True
+        model.load_weights(weights_path, by_name=True)
         
         # Compile model
         model.compile(
